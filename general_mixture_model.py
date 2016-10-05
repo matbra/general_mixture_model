@@ -4,14 +4,14 @@ import numpy as np
 from scipy.stats.distributions import norm, expon
 import matplotlib.pylab as plt
 
-import sys
-from os.path import join, dirname
+#import sys
+#from os.path import join, dirname
 
-sys.path.append(join(dirname(__file__), "..", "..", "resources", "pyfak"))
-sys.path.append(join(dirname(__file__), "..", "..", "resources", "fractional_octave_filterbank"))
+#sys.path.append(join(dirname(__file__), "..", "..", "resources", "pyfak"))
+#sys.path.append(join(dirname(__file__), "..", "..", "resources", "fractional_octave_filterbank"))
 
-from pyfak.dsp.common import wavread, spectrogram, get_regions, spectrogram2sound, wavwrite
-from fractional_octave_filterbank import fractional_octave_filterbank
+#from pyfak.dsp.common import wavread, spectrogram, get_regions, spectrogram2sound, wavwrite
+#from fractional_octave_filterbank import fractional_octave_filterbank
 
 def get_log_likelihood(x, type_dist, **kwargs):
     if type_dist == 'normal':
@@ -46,9 +46,9 @@ class EM:
         self.components = []
 #        self.components.append({'type': 'normal', 'params': {'mu': 100, 'sigma_2': 1}})
         
-        self.components.append({'type': 'normal', 'params': {'mu': 1, 'sigma_2': 1}})
+#        self.components.append({'type': 'normal', 'params': {'mu': 1, 'sigma_2': 1}})
 #        self.components.append({'type': 'normal', 'params': {'mu': 2, 'sigma_2': 1}})
-        self.components.append({'type': 'exp', 'params': {'sigma_2': 0.01}})
+#        self.components.append({'type': 'exp', 'params': {'sigma_2': 0.01}})
 #        self.components.append({'type': 'normal', 'params': {'mu': 0, 'sigma_2': 0.01}})
 #        self.components.append({'type': 'exp', 'params': {'sigma_2': 0.02}})
 #        self.components.append({'type': 'normal', 'params': {'mu': 10, 'sigma_2': 1}})
@@ -58,6 +58,10 @@ class EM:
         
         self.delta_evidence = 1e-9
         
+        
+        
+    def add_component(self, component):
+        self.components.append(component)
         self.component_probabilities = 1/len(self.components) * np.ones((self.n, len(self.components)))
         
     def E_step(self):
