@@ -3,6 +3,7 @@
 import numpy as np
 from scipy.stats.distributions import norm, expon
 import matplotlib.pylab as plt
+from scipy.stats import genpareto
 
 #import sys
 #from os.path import join, dirname
@@ -12,12 +13,34 @@ import matplotlib.pylab as plt
 
 #from pyfak.dsp.common import wavread, spectrogram, get_regions, spectrogram2sound, wavwrite
 #from fractional_octave_filterbank import fractional_octave_filterbank
+    
+def genpareto_ll(k, sigma, x):
+    # translated from the MATLAB function gpfit.m
+    n = 1#len(x);
+    z = x/sigma;
+    lnsigma = np.log(sigma)
+
+    if abs(k) > np.finfo('float').resolution:
+        if k > 0 or max(z) < -1/k:
+            sumlnu = np.log1p(k*z) # sum(log(1+k.*z)
+            nll = n*lnsigma + (1+1/k) * sumlnu;
+        else:
+            # The support of the GP when k<0 is 0 < x < abs(sigma/k).
+            nll = np.inf;
+    else: # limiting exponential dist'n as k->0
+        sumz = sum(z);
+        nll = n*lnsigma + sumz;
+        
+    return nll
 
 def get_log_likelihood(x, type_dist, **kwargs):
     if type_dist == 'normal':
         LL = -1/2 * np.log(2*np.pi) - 1/2 * np.log(kwargs['sigma_2']) - 1/(2*kwargs['sigma_2']) * (x - kwargs['mu'])**2 # only for one sample
     elif type_dist == 'exp':
         LL = -1 * np.log(2*kwargs['sigma_2']) - 1/(2*kwargs['sigma_2']) * x
+    elif type_dist == "genpareto":
+#        LL = np.array([genpareto_ll(kwargs['k'], kwargs['sigma'], _) for _ in x])
+        LL =genpareto_ll(kwargs['k'], kwargs['sigma'], x)
         
     return LL
 
@@ -38,6 +61,10 @@ def ml_parameter_estimation(x, weights, type_dist):
     elif type_dist == 'exp':
         sigma_2 = 1 / 2  * np.sum(weights * x) / sum_weights
         params = {'sigma_2': sigma_2, 'mu': 1/2 * sigma_2}
+    elif type_dist == 'genpareto':
+        fit_result = genpareto.fit(x)
+        k, sigma = [fit_result[_] for _ in [0,2]]
+        params = {'k': k, 'sigma': sigma}
         
     return params
     
@@ -83,7 +110,7 @@ class EM:
 
         ME = 0
         for idx, component in enumerate([self.components[_] for _ in idx_component]):
-            ME += np.sum(self.component_probabilities[:, idx] * get_likelihood(self.data, component['type'], **component['params']))
+            ME += np.sum(self.component_probabilities[:, idx] * get_likelihood(self.data, component['type'], **component['params'])) # TODO: should this be mean() to make it independent of the signal length?
             
         return ME
             
