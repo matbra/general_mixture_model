@@ -10,6 +10,7 @@ Until now, only
 
 - normal
 - exponential
+- generalized Pareto
 
 distributions supported.
 
