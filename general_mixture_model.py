@@ -17,27 +17,28 @@ from scipy.stats import genpareto
 def genpareto_ll(k, sigma, x):
     # translated from the MATLAB function gpfit.m
     n = 1#len(x);
-    z = x/sigma;
+    z = x/sigma
     lnsigma = np.log(sigma)
 
     if abs(k) > np.finfo('float').resolution:
         if k > 0 or max(z) < -1/k:
             sumlnu = np.log1p(k*z) # sum(log(1+k.*z)
-            nll = n*lnsigma + (1+1/k) * sumlnu;
+            nll = n*lnsigma + (1+1/k) * sumlnu
         else:
             # The support of the GP when k<0 is 0 < x < abs(sigma/k).
-            nll = np.inf;
+            nll = np.inf
     else: # limiting exponential dist'n as k->0
-        sumz = sum(z);
-        nll = n*lnsigma + sumz;
+        sumz = sum(z)
+        nll = n*lnsigma + sumz
         
-    return nll
+    return -nll
 
 def get_log_likelihood(x, type_dist, **kwargs):
     if type_dist == 'normal':
         LL = -1/2 * np.log(2*np.pi) - 1/2 * np.log(kwargs['sigma_2']) - 1/(2*kwargs['sigma_2']) * (x - kwargs['mu'])**2 # only for one sample
     elif type_dist == 'exp':
-        LL = -1 * np.log(2*kwargs['sigma_2']) - 1/(2*kwargs['sigma_2']) * x
+        # LL = -1 * np.log(2*kwargs['sigma_2']) - 1/(2*kwargs['sigma_2']) * x
+        LL = -1 * np.log(2*kwargs['sigma_2']) - 1 / (2*kwargs['sigma_2']) * x # TODO: this change is related to the mu <-> (2*)sigma_2 confusion
     elif type_dist == "genpareto":
 #        LL = np.array([genpareto_ll(kwargs['k'], kwargs['sigma'], _) for _ in x])
         LL =genpareto_ll(kwargs['k'], kwargs['sigma'], x)
@@ -59,8 +60,8 @@ def ml_parameter_estimation(x, weights, type_dist):
         
         params = {'mu': mu, 'sigma_2': sigma_2}
     elif type_dist == 'exp':
-        sigma_2 = 1 / 2  * np.sum(weights * x) / sum_weights
-        params = {'sigma_2': sigma_2, 'mu': 1/2 * sigma_2}
+        sigma_2 = 1 / 2  * np.sum(weights * x) / sum_weights # TODO: is this correct?
+        params = {'sigma_2': sigma_2, 'mu': 2 * sigma_2} # TODO: Also: The nomenclature is confusing. Sigma_2 is actually the mean of the sample values. I use it because it represents the power in each frequency bin... (-> probably not a good idea)
     elif type_dist == 'genpareto':
         fit_result = genpareto.fit(x)
         k, sigma = [fit_result[_] for _ in [0,2]]
@@ -96,7 +97,7 @@ class EM:
         P_comp = np.array([get_likelihood(self.data, component['type'], **component['params']) for component in self.components]).T
         
         for idx, P_comp_i in enumerate(P_comp.T):
-            self.component_probabilities[:,idx] = P_comp_i / (np.sum(P_comp, axis=1) + 1e-9)
+            self.component_probabilities[:,idx] = P_comp_i / (np.sum(P_comp, axis=1)) # TODO: +1e-9 ?
         
     def M_step(self):
         # update the distribution parameters
@@ -110,16 +111,46 @@ class EM:
 
         ME = 0
         for idx, component in enumerate([self.components[_] for _ in idx_component]):
-            ME += np.sum(self.component_probabilities[:, idx] * get_likelihood(self.data, component['type'], **component['params'])) # TODO: should this be mean() to make it independent of the signal length?
+            ME += np.sum(self.component_probabilities[:, idx] * get_log_likelihood(self.data, component['type'], **component['params'])) # TODO: should this be mean() to make it independent of the signal length?
             
         return ME
+
+    def get_pdf(self, x, idx_component=None):
+        if idx_component is None:
+            idx_component = range(len(self.components))
+
+        f = np.zeros(len(x))
+        for idx, component in enumerate([self.components[_] for _ in idx_component]):
+            f += get_likelihood(x, component['type'], **component['params']) # TODO: weigh with component probability?
+
+        return f
+
+    def get_cdf(self, x, idx_component=None):
+        if idx_component is None:
+            idx_component = range(len(self.components)) # TODO: not supported yet
+            # raise ValueError("Selecting more than one components is not supported yet.")
+
+        # component = self.components[idx_component]
+
+        F = np.zeros(1)
+        for idx, component in enumerate([self.components[_] for _ in idx_component]):
+            if component['type'] == 'exp':
+                F += np.mean(self.component_probabilities[:, idx]) * expon.cdf(x, loc=0, scale=2*component['params']['sigma_2'])
+            if component['type'] == 'norm':
+                F += np.mean(self.component_probabilities[:, idx]) * norm.cdf(x, loc=component['params']['mu'], scale=component['params']['sigma_2'])
+            if component['type'] == 'genpareto':
+                F += np.mean(self.component_probabilities[:, idx]) * genpareto.cdf(x, component['params']['k'], loc=0, scale=component['params']['sigma'])
+
+
+        return F[0] # TODO: find a better way to return a list
+
             
-    def estimate(self, N_iter=1000):
+    def estimate(self, N_iter=100000):
         evidence_last = -np.inf
         for _ in range(N_iter):
             self.E_step()
             self.M_step()
-#            print("iteration {} -- evidence: {}".format(_, self.model_evidence()))
+            print("iteration {} -- evidence: {}".format(_, self.model_evidence()))
             evidence = self.model_evidence()
             if np.abs(evidence - evidence_last) < self.delta_evidence: # why is this abs required? shouldn't the evidence increase monotonically?
                 break
