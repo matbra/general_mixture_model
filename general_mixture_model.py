@@ -145,13 +145,15 @@ class EM:
         return F[0] # TODO: find a better way to return a list
 
             
-    def estimate(self, N_iter=100000):
+    def estimate(self, N_iter=10000):
         evidence_last = -np.inf
         for _ in range(N_iter):
             self.E_step()
             self.M_step()
             print("iteration {} -- evidence: {}".format(_, self.model_evidence()))
             evidence = self.model_evidence()
+            if np.isnan(evidence):
+                raise RuntimeError("EM likelihood maximization failed.")
             if np.abs(evidence - evidence_last) < self.delta_evidence: # why is this abs required? shouldn't the evidence increase monotonically?
                 break
             evidence_last = evidence
